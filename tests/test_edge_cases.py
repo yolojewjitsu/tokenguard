@@ -173,3 +173,25 @@ class TestEdgeCases:
         costs1["input"] = 999.0  # Modify the returned dict
         costs2 = get_model_cost("gpt-4")
         assert costs2["input"] != 999.0  # Original should be unchanged
+
+    def test_prefix_match_longest_wins(self):
+        """Test that prefix matching picks the longest match."""
+        # "o1-mini-xxx" should match "o1-mini", not "o1"
+        costs = get_model_cost("o1-mini-2025-01-31")
+        # o1-mini has different pricing than o1
+        o1_mini_costs = get_model_cost("o1-mini")
+        assert costs["input"] == o1_mini_costs["input"]
+        assert costs["output"] == o1_mini_costs["output"]
+
+    def test_negative_budget_raises(self):
+        """Test that negative budget raises ValueError."""
+        with pytest.raises(ValueError, match="non-negative"):
+            TokenTracker(budget=-1.00)
+
+    def test_alert_at_out_of_range_raises(self):
+        """Test that alert_at outside [0, 1] raises ValueError."""
+        with pytest.raises(ValueError, match="between 0.0 and 1.0"):
+            TokenTracker(budget=1.00, alert_at=1.5)
+
+        with pytest.raises(ValueError, match="between 0.0 and 1.0"):
+            TokenTracker(budget=1.00, alert_at=-0.1)

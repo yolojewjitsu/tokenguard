@@ -112,7 +112,9 @@ def get_model_cost(model: str) -> dict[str, float]:
             return _MODEL_COSTS[model].copy()
 
         # Try prefix match (e.g., "gpt-4-0613" matches "gpt-4")
-        for known_model in _MODEL_COSTS:
+        # Sort by length descending to match longest prefix first
+        # (e.g., "o1-mini-xxx" should match "o1-mini", not "o1")
+        for known_model in sorted(_MODEL_COSTS.keys(), key=len, reverse=True):
             if model.startswith(known_model):
                 return _MODEL_COSTS[known_model].copy()
 
@@ -221,6 +223,12 @@ class TokenTracker:
         """
         if period not in ("session", "daily", "monthly"):
             raise ValueError(f"Invalid period: {period!r}. Use 'session', 'daily', or 'monthly'.")
+
+        if budget < 0:
+            raise ValueError(f"Budget must be non-negative, got {budget}")
+
+        if alert_at is not None and not (0.0 <= alert_at <= 1.0):
+            raise ValueError(f"alert_at must be between 0.0 and 1.0, got {alert_at}")
 
         self._budget = budget
         self._period = period
@@ -507,7 +515,6 @@ def tokenguard(
         wrapper.tracker = tracker  # type: ignore[attr-defined]
         wrapper.reset = tracker.reset  # type: ignore[attr-defined]
         wrapper.report = tracker.report  # type: ignore[attr-defined]
-        wrapper.total_cost = property(lambda self: tracker.total_cost)  # type: ignore[attr-defined]
 
         return wrapper
 
