@@ -2,7 +2,7 @@
 
 import pytest
 
-from tokenguard import TokenTracker, tokenguard, calculate_cost, get_model_cost
+from tokenguard import TokenTracker, tokenguard, calculate_cost, get_model_cost, set_model_cost
 
 
 class TestEdgeCases:
@@ -195,3 +195,67 @@ class TestEdgeCases:
 
         with pytest.raises(ValueError, match="between 0.0 and 1.0"):
             TokenTracker(budget=1.00, alert_at=-0.1)
+
+    def test_negative_input_tokens_raises(self):
+        """Test that negative input_tokens raises ValueError."""
+        tracker = TokenTracker(budget=1.00)
+        with pytest.raises(ValueError, match="input_tokens must be non-negative"):
+            tracker.track(input_tokens=-100, output_tokens=50, model="gpt-4")
+
+    def test_negative_output_tokens_raises(self):
+        """Test that negative output_tokens raises ValueError."""
+        tracker = TokenTracker(budget=1.00)
+        with pytest.raises(ValueError, match="output_tokens must be non-negative"):
+            tracker.track(input_tokens=100, output_tokens=-50, model="gpt-4")
+
+    def test_set_model_cost_negative_input_raises(self):
+        """Test that negative input cost raises ValueError."""
+        with pytest.raises(ValueError, match="Input cost must be non-negative"):
+            set_model_cost("test-model", input=-0.01, output=0.02)
+
+    def test_set_model_cost_negative_output_raises(self):
+        """Test that negative output cost raises ValueError."""
+        with pytest.raises(ValueError, match="Output cost must be non-negative"):
+            set_model_cost("test-model", input=0.01, output=-0.02)
+
+    def test_budget_hit_fires_once(self):
+        """Test that on_budget_hit callback only fires once."""
+        hits = []
+
+        def on_hit(tracker, usage):
+            hits.append(usage)
+
+        tracker = TokenTracker(
+            budget=0.05,
+            on_budget_hit=on_hit,
+            raise_on_exceed=False,
+        )
+
+        # First call exceeds budget - should fire callback
+        tracker.track(input_tokens=1000, output_tokens=500, model="gpt-4")
+        assert len(hits) == 1
+
+        # Second call also over budget - should NOT fire callback again
+        tracker.track(input_tokens=1000, output_tokens=500, model="gpt-4")
+        assert len(hits) == 1
+
+    def test_reset_allows_budget_hit_to_fire_again(self):
+        """Test that reset() allows budget_hit to fire again."""
+        hits = []
+
+        def on_hit(tracker, usage):
+            hits.append(usage)
+
+        tracker = TokenTracker(
+            budget=0.05,
+            on_budget_hit=on_hit,
+            raise_on_exceed=False,
+        )
+
+        tracker.track(input_tokens=1000, output_tokens=500, model="gpt-4")
+        assert len(hits) == 1
+
+        tracker.reset()
+
+        tracker.track(input_tokens=1000, output_tokens=500, model="gpt-4")
+        assert len(hits) == 2

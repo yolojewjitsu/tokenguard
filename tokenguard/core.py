@@ -136,7 +136,15 @@ def set_model_cost(
         input: Cost per 1K input tokens in USD.
         output: Cost per 1K output tokens in USD.
 
+    Raises:
+        ValueError: If input or output cost is negative.
+
     """
+    if input < 0:
+        raise ValueError(f"Input cost must be non-negative, got {input}")
+    if output < 0:
+        raise ValueError(f"Output cost must be non-negative, got {output}")
+
     with _costs_lock:
         _MODEL_COSTS[model] = {"input": input, "output": output}
 
@@ -239,6 +247,7 @@ class TokenTracker:
 
         self._usage: list[TokenUsage] = []
         self._alert_fired = False
+        self._budget_hit_fired = False
         self._lock = threading.Lock()
 
         # Load persisted usage for daily/monthly
@@ -308,8 +317,14 @@ class TokenTracker:
 
         Raises:
             TokenBudgetExceeded: If budget is exceeded and raise_on_exceed=True.
+            ValueError: If token counts are negative.
 
         """
+        if input_tokens < 0:
+            raise ValueError(f"input_tokens must be non-negative, got {input_tokens}")
+        if output_tokens < 0:
+            raise ValueError(f"output_tokens must be non-negative, got {output_tokens}")
+
         cost = calculate_cost(
             input_tokens,
             output_tokens,
@@ -349,7 +364,9 @@ class TokenTracker:
 
             # Check budget
             if total >= self._budget:
-                budget_hit_callback = self._on_budget_hit
+                if not self._budget_hit_fired:
+                    self._budget_hit_fired = True
+                    budget_hit_callback = self._on_budget_hit
                 raise_exception = self._raise_on_exceed
 
         # Call callbacks OUTSIDE the lock to avoid deadlock
@@ -369,12 +386,14 @@ class TokenTracker:
         with self._lock:
             self._usage.clear()
             self._alert_fired = False
+            self._budget_hit_fired = False
 
     def reset_all(self) -> None:
         """Reset all usage including persisted data."""
         with self._lock:
             self._usage.clear()
             self._alert_fired = False
+            self._budget_hit_fired = False
             self._persisted_cost = 0.0
 
             if self._period == "daily":
