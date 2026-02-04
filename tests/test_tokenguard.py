@@ -34,10 +34,11 @@ class TestModelCosts:
 
     def test_set_model_cost(self):
         """Test setting custom model cost."""
-        set_model_cost("my-custom-model", input=0.01, output=0.02)
-        costs = get_model_cost("my-custom-model")
+        set_model_cost("test-custom-model-12345", input=0.01, output=0.02)
+        costs = get_model_cost("test-custom-model-12345")
         assert costs["input"] == 0.01
         assert costs["output"] == 0.02
+        # Note: This adds to global state but uses a unique name unlikely to conflict
 
     def test_override_existing_model_cost(self):
         """Test overriding existing model cost."""
@@ -249,6 +250,29 @@ class TestTokenTracker:
         """Test period property returns correct value."""
         tracker = TokenTracker(budget=1.00, period="session")
         assert tracker.period == "session"
+
+    def test_track_with_custom_costs(self):
+        """Test track() with custom cost overrides."""
+        tracker = TokenTracker(budget=1.00)
+        usage = tracker.track(
+            input_tokens=1000,
+            output_tokens=1000,
+            model="gpt-4",
+            input_cost_per_1k=0.001,
+            output_cost_per_1k=0.002,
+        )
+        # 1000 * 0.001 / 1000 + 1000 * 0.002 / 1000 = 0.001 + 0.002 = 0.003
+        assert usage.cost == pytest.approx(0.003)
+        assert tracker.total_cost == pytest.approx(0.003)
+
+    def test_budget_exceeded_has_model(self):
+        """Test that TokenBudgetExceeded has correct model attribute."""
+        tracker = TokenTracker(budget=0.01, raise_on_exceed=True)
+
+        with pytest.raises(TokenBudgetExceeded) as exc:
+            tracker.track(input_tokens=1000, output_tokens=500, model="gpt-4")
+
+        assert exc.value.model == "gpt-4"
 
 
 class TestDailyMonthlyPersistence:
@@ -499,6 +523,37 @@ class TestTokenguardDecorator:
         assert report["calls"] == 1
         assert report["budget"] == 1.00
 
+    def test_decorator_with_alert_callback(self):
+        """Test decorator with on_alert callback."""
+        alerts = []
+
+        @tokenguard(
+            budget=0.10,
+            alert_at=0.5,
+            on_alert=lambda t, u: alerts.append(u),
+            raise_on_exceed=False,
+        )
+        def mock_call():
+            return {"input_tokens": 1000, "output_tokens": 500, "model": "gpt-4"}
+
+        mock_call()  # Cost ~0.06 > 50% of 0.10
+        assert len(alerts) == 1
+
+    def test_decorator_with_budget_hit_callback(self):
+        """Test decorator with on_budget_hit callback."""
+        hits = []
+
+        @tokenguard(
+            budget=0.05,
+            on_budget_hit=lambda t, u: hits.append(u),
+            raise_on_exceed=False,
+        )
+        def mock_call():
+            return {"input_tokens": 1000, "output_tokens": 500, "model": "gpt-4"}
+
+        mock_call()  # Cost ~0.06 > budget 0.05
+        assert len(hits) == 1
+
 
 class TestTokenBudgetContext:
     def test_context_manager_basic(self):
@@ -523,6 +578,33 @@ class TestTokenBudgetContext:
         with pytest.raises(TokenBudgetExceeded):
             with token_budget(budget=0.001) as guard:
                 guard.track(input_tokens=1000, output_tokens=500, model="gpt-4")
+
+    def test_context_manager_with_alert_callback(self):
+        """Test context manager with on_alert callback."""
+        alerts = []
+
+        with token_budget(
+            budget=0.10,
+            alert_at=0.5,
+            on_alert=lambda t, u: alerts.append(u),
+            raise_on_exceed=False,
+        ) as guard:
+            guard.track(input_tokens=1000, output_tokens=500, model="gpt-4")
+
+        assert len(alerts) == 1
+
+    def test_context_manager_with_budget_hit_callback(self):
+        """Test context manager with on_budget_hit callback."""
+        hits = []
+
+        with token_budget(
+            budget=0.05,
+            on_budget_hit=lambda t, u: hits.append(u),
+            raise_on_exceed=False,
+        ) as guard:
+            guard.track(input_tokens=1000, output_tokens=500, model="gpt-4")
+
+        assert len(hits) == 1
 
 
 class TestTokenUsage:
