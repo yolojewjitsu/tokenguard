@@ -26,7 +26,9 @@ class TestEdgeCases:
         """Test tracking very large token counts."""
         tracker = TokenTracker(budget=1000000.00, raise_on_exceed=False)
         # 1 billion tokens each
-        usage = tracker.track(input_tokens=1_000_000_000, output_tokens=1_000_000_000, model="gpt-4")
+        usage = tracker.track(
+            input_tokens=1_000_000_000, output_tokens=1_000_000_000, model="gpt-4"
+        )
 
         # Should calculate without overflow
         assert usage.cost > 0
@@ -124,6 +126,7 @@ class TestEdgeCases:
 
     def test_decorator_missing_fields(self):
         """Test decorator handles dict missing required fields."""
+
         @tokenguard(budget=1.00)
         def partial_result():
             return {"input_tokens": 100}  # Missing output_tokens and model
@@ -135,6 +138,7 @@ class TestEdgeCases:
 
     def test_decorator_none_result(self):
         """Test decorator handles None result."""
+
         @tokenguard(budget=1.00)
         def returns_none():
             return None
@@ -169,7 +173,9 @@ class TestEdgeCases:
     def test_custom_cost_both_rates(self):
         """Test calculate_cost with both custom rates."""
         cost = calculate_cost(
-            1000, 1000, "gpt-4",
+            1000,
+            1000,
+            "gpt-4",
             input_cost_per_1k=0.001,
             output_cost_per_1k=0.002,
         )
@@ -287,7 +293,9 @@ class TestEdgeCases:
         """Test that unknown model works when both custom rates provided."""
         # Should not raise because we don't need to look up the model
         cost = calculate_cost(
-            1000, 1000, "unknown-model-xyz",
+            1000,
+            1000,
+            "unknown-model-xyz",
             input_cost_per_1k=0.01,
             output_cost_per_1k=0.02,
         )
@@ -295,6 +303,7 @@ class TestEdgeCases:
 
     def test_decorator_passes_arguments(self):
         """Test that decorator correctly passes function arguments."""
+
         @tokenguard(budget=1.00)
         def add_tokens(a: int, b: int, model: str = "gpt-4") -> dict:
             return {
@@ -310,6 +319,7 @@ class TestEdgeCases:
 
     def test_decorator_function_raises_no_tracking(self):
         """Test that decorator doesn't track when function raises."""
+
         @tokenguard(budget=1.00)
         def failing_func():
             raise RuntimeError("Intentional error")
@@ -359,6 +369,7 @@ class TestEdgeCases:
 
     def test_decorator_raise_on_exceed_false(self):
         """Test decorator with raise_on_exceed=False allows continued tracking."""
+
         @tokenguard(budget=0.01, raise_on_exceed=False)
         def cheap_call():
             return {"input_tokens": 1000, "output_tokens": 500, "model": "gpt-4"}
@@ -381,10 +392,14 @@ class TestEdgeCases:
 
         # Pre-create a daily.json with invalid total_cost type
         daily_file = tmp_path / "daily.json"
-        daily_file.write_text(json.dumps({
-            "date": "2026-02-04",
-            "total_cost": "not a number"  # Invalid type
-        }))
+        daily_file.write_text(
+            json.dumps(
+                {
+                    "date": "2026-02-04",
+                    "total_cost": "not a number",  # Invalid type
+                }
+            )
+        )
 
         tracker = TokenTracker(budget=10.00, period="daily")
         # Should fall back to 0.0 when total_cost is not a number
@@ -433,10 +448,14 @@ class TestEdgeCases:
 
         # Pre-create a daily.json with negative total_cost
         daily_file = tmp_path / "daily.json"
-        daily_file.write_text(json.dumps({
-            "date": "2026-02-04",
-            "total_cost": -5.0  # Invalid negative value
-        }))
+        daily_file.write_text(
+            json.dumps(
+                {
+                    "date": "2026-02-04",
+                    "total_cost": -5.0,  # Invalid negative value
+                }
+            )
+        )
 
         tracker = TokenTracker(budget=10.00, period="daily")
         # Should fall back to 0.0 when total_cost is negative
@@ -496,3 +515,97 @@ class TestEdgeCases:
         # Third tracker should see both
         tracker3 = TokenTracker(budget=10.00, period="daily")
         assert tracker3.total_cost == pytest.approx(cost1 * 2)
+
+    def test_persisted_file_missing_period_key(self, tmp_path, monkeypatch):
+        """Test that persistence file missing period key is handled."""
+        import json
+
+        monkeypatch.setattr("tokenguard.core._get_storage_dir", lambda: tmp_path)
+        monkeypatch.setattr("tokenguard.core._today", lambda: "2026-02-04")
+
+        # Pre-create a daily.json missing the 'date' key
+        daily_file = tmp_path / "daily.json"
+        daily_file.write_text(
+            json.dumps(
+                {
+                    "total_cost": 5.0  # Missing 'date' key
+                }
+            )
+        )
+
+        tracker = TokenTracker(budget=10.00, period="daily")
+        # Should fall back to 0.0 when period key is missing (period rolled over)
+        assert tracker.total_cost == 0.0
+
+    def test_decorator_with_list_result(self):
+        """Test that decorator does not track when result is a list."""
+
+        @tokenguard(budget=1.00)
+        def returns_list():
+            return [{"input_tokens": 100, "output_tokens": 50, "model": "gpt-4"}]
+
+        result = returns_list()
+        assert isinstance(result, list)
+        # Should not track since result is not a dict
+        assert returns_list.tracker.call_count == 0
+
+    def test_decorator_with_tuple_result(self):
+        """Test that decorator does not track when result is a tuple."""
+
+        @tokenguard(budget=1.00)
+        def returns_tuple():
+            return (100, 50, "gpt-4")
+
+        result = returns_tuple()
+        assert isinstance(result, tuple)
+        # Should not track since result is not a dict
+        assert returns_tuple.tracker.call_count == 0
+
+    def test_report_when_over_budget(self):
+        """Test report() returns correct is_over_budget when over budget."""
+        tracker = TokenTracker(budget=0.05, raise_on_exceed=False)
+        tracker.track(input_tokens=1000, output_tokens=500, model="gpt-4")
+
+        report = tracker.report()
+        assert report["is_over_budget"] is True
+        assert report["remaining"] == 0.0
+        assert report["total_cost"] > report["budget"]
+
+    def test_token_usage_equality(self):
+        """Test that TokenUsage instances with same values are equal."""
+        timestamp = 1234567890.0
+        usage1 = TokenUsage(
+            input_tokens=100,
+            output_tokens=50,
+            model="gpt-4",
+            cost=0.05,
+            timestamp=timestamp,
+        )
+        usage2 = TokenUsage(
+            input_tokens=100,
+            output_tokens=50,
+            model="gpt-4",
+            cost=0.05,
+            timestamp=timestamp,
+        )
+        # Dataclasses with default eq=True should be equal
+        assert usage1 == usage2
+
+    def test_token_usage_inequality(self):
+        """Test that TokenUsage instances with different values are not equal."""
+        timestamp = 1234567890.0
+        usage1 = TokenUsage(
+            input_tokens=100,
+            output_tokens=50,
+            model="gpt-4",
+            cost=0.05,
+            timestamp=timestamp,
+        )
+        usage2 = TokenUsage(
+            input_tokens=200,  # Different
+            output_tokens=50,
+            model="gpt-4",
+            cost=0.05,
+            timestamp=timestamp,
+        )
+        assert usage1 != usage2

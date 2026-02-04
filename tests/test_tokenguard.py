@@ -47,7 +47,9 @@ class TestModelCosts:
         updated = get_model_cost("gpt-3.5-turbo")
         assert updated["input"] == 0.001
         # Restore original
-        set_model_cost("gpt-3.5-turbo", input=original["input"], output=original["output"])
+        set_model_cost(
+            "gpt-3.5-turbo", input=original["input"], output=original["output"]
+        )
 
 
 class TestCalculateCost:
@@ -60,7 +62,9 @@ class TestCalculateCost:
     def test_with_custom_rates(self):
         """Test calculation with custom rates."""
         cost = calculate_cost(
-            1000, 1000, "gpt-4",
+            1000,
+            1000,
+            "gpt-4",
             input_cost_per_1k=0.01,
             output_cost_per_1k=0.02,
         )
@@ -70,7 +74,9 @@ class TestCalculateCost:
     def test_partial_custom_input_rate(self):
         """Test calculation with partial custom input rate."""
         cost = calculate_cost(
-            1000, 1000, "gpt-4",
+            1000,
+            1000,
+            "gpt-4",
             input_cost_per_1k=0.01,  # Custom input
             # output uses model default (0.06)
         )
@@ -80,7 +86,9 @@ class TestCalculateCost:
     def test_partial_custom_output_rate(self):
         """Test calculation with partial custom output rate."""
         cost = calculate_cost(
-            1000, 1000, "gpt-4",
+            1000,
+            1000,
+            "gpt-4",
             # input uses model default (0.03)
             output_cost_per_1k=0.01,  # Custom output
         )
@@ -352,10 +360,9 @@ class TestDailyMonthlyPersistence:
 
         # Pre-create a daily.json with existing cost
         daily_file = tmp_path / "daily.json"
-        daily_file.write_text(json.dumps({
-            "date": time.strftime("%Y-%m-%d"),
-            "total_cost": 0.50
-        }))
+        daily_file.write_text(
+            json.dumps({"date": time.strftime("%Y-%m-%d"), "total_cost": 0.50})
+        )
 
         tracker = TokenTracker(budget=10.00, period="daily")
         assert tracker.total_cost == 0.50
@@ -369,10 +376,9 @@ class TestDailyMonthlyPersistence:
 
         # Pre-create a monthly.json with existing cost
         monthly_file = tmp_path / "monthly.json"
-        monthly_file.write_text(json.dumps({
-            "month": time.strftime("%Y-%m"),
-            "total_cost": 1.25
-        }))
+        monthly_file.write_text(
+            json.dumps({"month": time.strftime("%Y-%m"), "total_cost": 1.25})
+        )
 
         tracker = TokenTracker(budget=10.00, period="monthly")
         assert tracker.total_cost == 1.25
@@ -385,10 +391,14 @@ class TestDailyMonthlyPersistence:
 
         # Pre-create a daily.json with old date
         daily_file = tmp_path / "daily.json"
-        daily_file.write_text(json.dumps({
-            "date": "2020-01-01",  # Old date
-            "total_cost": 5.00
-        }))
+        daily_file.write_text(
+            json.dumps(
+                {
+                    "date": "2020-01-01",  # Old date
+                    "total_cost": 5.00,
+                }
+            )
+        )
 
         tracker = TokenTracker(budget=10.00, period="daily")
         assert tracker.total_cost == 0.0  # Should reset
@@ -401,10 +411,14 @@ class TestDailyMonthlyPersistence:
 
         # Pre-create a monthly.json with old month
         monthly_file = tmp_path / "monthly.json"
-        monthly_file.write_text(json.dumps({
-            "month": "2020-01",  # Old month
-            "total_cost": 5.00
-        }))
+        monthly_file.write_text(
+            json.dumps(
+                {
+                    "month": "2020-01",  # Old month
+                    "total_cost": 5.00,
+                }
+            )
+        )
 
         tracker = TokenTracker(budget=10.00, period="monthly")
         assert tracker.total_cost == 0.0  # Should reset
@@ -487,10 +501,9 @@ class TestDailyMonthlyPersistence:
 
         # Pre-create a daily.json with existing cost
         daily_file = tmp_path / "daily.json"
-        daily_file.write_text(json.dumps({
-            "date": time.strftime("%Y-%m-%d"),
-            "total_cost": 0.50
-        }))
+        daily_file.write_text(
+            json.dumps({"date": time.strftime("%Y-%m-%d"), "total_cost": 0.50})
+        )
 
         tracker = TokenTracker(budget=10.00, period="daily")
         assert tracker.total_cost == 0.50
@@ -521,6 +534,7 @@ class TestDailyMonthlyPersistence:
 class TestTokenguardDecorator:
     def test_decorator_tracks_dict_result(self):
         """Test decorator extracts tokens from dict result."""
+
         @tokenguard(budget=1.00)
         def mock_llm_call():
             return {
@@ -538,6 +552,7 @@ class TestTokenguardDecorator:
 
     def test_decorator_ignores_non_dict(self):
         """Test decorator ignores non-dict results."""
+
         @tokenguard(budget=1.00)
         def simple_func():
             return "just a string"
@@ -549,6 +564,7 @@ class TestTokenguardDecorator:
 
     def test_decorator_budget_exceeded(self):
         """Test decorator raises on budget exceeded."""
+
         @tokenguard(budget=0.001)
         def expensive_call():
             return {
@@ -563,6 +579,7 @@ class TestTokenguardDecorator:
 
     def test_decorator_preserves_function_metadata(self):
         """Test that decorator preserves function metadata."""
+
         @tokenguard(budget=1.00)
         def documented_func():
             """This is a docstring."""
@@ -573,6 +590,7 @@ class TestTokenguardDecorator:
 
     def test_decorator_reset(self):
         """Test decorator reset method."""
+
         @tokenguard(budget=1.00)
         def mock_call():
             return {"input_tokens": 100, "output_tokens": 50, "model": "gpt-4"}
@@ -585,6 +603,7 @@ class TestTokenguardDecorator:
 
     def test_decorator_report(self):
         """Test decorator report method."""
+
         @tokenguard(budget=1.00)
         def mock_call():
             return {"input_tokens": 100, "output_tokens": 50, "model": "gpt-4"}

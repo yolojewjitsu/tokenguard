@@ -179,17 +179,25 @@ def calculate_cost(
     if output_tokens < 0:
         raise ValueError(f"output_tokens must be non-negative, got {output_tokens}")
     if input_cost_per_1k is not None and input_cost_per_1k < 0:
-        raise ValueError(f"input_cost_per_1k must be non-negative, got {input_cost_per_1k}")
+        raise ValueError(
+            f"input_cost_per_1k must be non-negative, got {input_cost_per_1k}"
+        )
     if output_cost_per_1k is not None and output_cost_per_1k < 0:
-        raise ValueError(f"output_cost_per_1k must be non-negative, got {output_cost_per_1k}")
+        raise ValueError(
+            f"output_cost_per_1k must be non-negative, got {output_cost_per_1k}"
+        )
 
     if input_cost_per_1k is not None and output_cost_per_1k is not None:
         input_rate = input_cost_per_1k
         output_rate = output_cost_per_1k
     else:
         costs = get_model_cost(model)
-        input_rate = input_cost_per_1k if input_cost_per_1k is not None else costs["input"]
-        output_rate = output_cost_per_1k if output_cost_per_1k is not None else costs["output"]
+        input_rate = (
+            input_cost_per_1k if input_cost_per_1k is not None else costs["input"]
+        )
+        output_rate = (
+            output_cost_per_1k if output_cost_per_1k is not None else costs["output"]
+        )
 
     return (input_tokens * input_rate / 1000) + (output_tokens * output_rate / 1000)
 
@@ -238,12 +246,14 @@ class TokenTracker:
             period: "session", "daily", or "monthly".
             alert_at: Fraction of budget to trigger alert (e.g., 0.8 for 80%).
             on_alert: Callback when alert threshold is reached.
-            on_budget_hit: Callback when budget is exceeded.
+            on_budget_hit: Callback when budget is met or exceeded.
             raise_on_exceed: Whether to raise TokenBudgetExceeded.
 
         """
         if period not in ("session", "daily", "monthly"):
-            raise ValueError(f"Invalid period: {period!r}. Use 'session', 'daily', or 'monthly'.")
+            raise ValueError(
+                f"Invalid period: {period!r}. Use 'session', 'daily', or 'monthly'."
+            )
 
         if budget < 0:
             raise ValueError(f"Budget must be non-negative, got {budget}")
@@ -477,7 +487,10 @@ class TokenTracker:
             data = {"date": _today(), "total_cost": self._persisted_cost + session_cost}
         else:
             file = self._get_monthly_file()
-            data = {"month": _this_month(), "total_cost": self._persisted_cost + session_cost}
+            data = {
+                "month": _this_month(),
+                "total_cost": self._persisted_cost + session_cost,
+            }
 
         file.write_text(json.dumps(data))
 
@@ -538,7 +551,11 @@ def tokenguard(
                 output_tokens = result.get("output_tokens")
                 model = result.get("model")
 
-                if input_tokens is not None and output_tokens is not None and model is not None:
+                if (
+                    input_tokens is not None
+                    and output_tokens is not None
+                    and model is not None
+                ):
                     tracker.track(
                         input_tokens=input_tokens,
                         output_tokens=output_tokens,
