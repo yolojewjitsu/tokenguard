@@ -54,12 +54,12 @@ _costs_lock = threading.Lock()
 
 
 class TokenBudgetExceeded(Exception):
-    """Raised when token budget is exceeded.
+    """Raised when token budget is met or exceeded.
 
     Attributes:
-        budget: The budget limit that was exceeded.
-        spent: The amount spent when budget was exceeded.
-        model: The model that caused the budget to be exceeded.
+        budget: The budget limit that was met or exceeded.
+        spent: The amount spent when budget was hit.
+        model: The model that caused the budget to be hit.
 
     """
 
@@ -170,10 +170,14 @@ def calculate_cost(
         Total cost in USD.
 
     Raises:
-        ValueError: If custom cost rates are negative, or if model is unknown
-            and no custom rates are provided.
+        ValueError: If token counts or custom cost rates are negative, or if
+            model is unknown and no custom rates are provided.
 
     """
+    if input_tokens < 0:
+        raise ValueError(f"input_tokens must be non-negative, got {input_tokens}")
+    if output_tokens < 0:
+        raise ValueError(f"output_tokens must be non-negative, got {output_tokens}")
     if input_cost_per_1k is not None and input_cost_per_1k < 0:
         raise ValueError(f"input_cost_per_1k must be non-negative, got {input_cost_per_1k}")
     if output_cost_per_1k is not None and output_cost_per_1k < 0:
@@ -459,8 +463,8 @@ class TokenTracker:
                 # Period rolled over, reset
                 return 0.0
             total_cost = data.get("total_cost", 0.0)
-            # Validate that total_cost is a number
-            if not isinstance(total_cost, (int, float)):
+            # Validate that total_cost is a non-negative number
+            if not isinstance(total_cost, (int, float)) or total_cost < 0:
                 return 0.0
             return float(total_cost)
         except (json.JSONDecodeError, OSError):

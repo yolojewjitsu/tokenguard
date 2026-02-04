@@ -407,3 +407,44 @@ class TestEdgeCases:
         assert tracker.total_cost == pytest.approx(0.03)
         assert tracker.is_over_budget is True
         assert tracker.remaining == 0.0
+
+    def test_calculate_cost_negative_input_tokens_raises(self):
+        """Test that negative input_tokens raises ValueError in calculate_cost."""
+        with pytest.raises(ValueError, match="input_tokens must be non-negative"):
+            calculate_cost(-100, 100, "gpt-4")
+
+    def test_calculate_cost_negative_output_tokens_raises(self):
+        """Test that negative output_tokens raises ValueError in calculate_cost."""
+        with pytest.raises(ValueError, match="output_tokens must be non-negative"):
+            calculate_cost(100, -100, "gpt-4")
+
+    def test_persisted_negative_total_cost_ignored(self, tmp_path, monkeypatch):
+        """Test that negative total_cost in persistence file is ignored."""
+        import json
+
+        monkeypatch.setattr("tokenguard.core._get_storage_dir", lambda: tmp_path)
+        monkeypatch.setattr("tokenguard.core._today", lambda: "2026-02-04")
+
+        # Pre-create a daily.json with negative total_cost
+        daily_file = tmp_path / "daily.json"
+        daily_file.write_text(json.dumps({
+            "date": "2026-02-04",
+            "total_cost": -5.0  # Invalid negative value
+        }))
+
+        tracker = TokenTracker(budget=10.00, period="daily")
+        # Should fall back to 0.0 when total_cost is negative
+        assert tracker.total_cost == 0.0
+
+    def test_context_manager_raise_on_exceed_false(self):
+        """Test context manager with raise_on_exceed=False allows continued tracking."""
+        from tokenguard import token_budget
+
+        with token_budget(budget=0.01, raise_on_exceed=False) as guard:
+            # First track exceeds budget but doesn't raise
+            guard.track(input_tokens=1000, output_tokens=500, model="gpt-4")
+            assert guard.is_over_budget
+
+            # Can continue tracking
+            guard.track(input_tokens=100, output_tokens=50, model="gpt-4")
+            assert guard.call_count == 2
