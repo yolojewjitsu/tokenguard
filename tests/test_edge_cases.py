@@ -707,3 +707,70 @@ class TestEdgeCases:
         assert usage.model == "gpt-4"
         assert usage.cost > 0
         assert usage.timestamp > 0
+
+    def test_persisted_json_null_handled(self, tmp_path, monkeypatch):
+        """Test that persistence file containing JSON null is handled gracefully."""
+        monkeypatch.setattr("tokenguard.core._get_storage_dir", lambda: tmp_path)
+        monkeypatch.setattr("tokenguard.core._today", lambda: "2026-02-04")
+
+        # Pre-create a daily.json with null (valid JSON but wrong type)
+        daily_file = tmp_path / "daily.json"
+        daily_file.write_text("null")
+
+        tracker = TokenTracker(budget=10.00, period="daily")
+        # Should fall back to 0.0 when JSON is null
+        assert tracker.total_cost == 0.0
+
+    def test_period_property_daily(self):
+        """Test period property returns 'daily' for daily tracker."""
+        tracker = TokenTracker(budget=1.00, period="daily")
+        assert tracker.period == "daily"
+
+    def test_period_property_monthly(self):
+        """Test period property returns 'monthly' for monthly tracker."""
+        tracker = TokenTracker(budget=1.00, period="monthly")
+        assert tracker.period == "monthly"
+
+    def test_report_initial_state(self):
+        """Test report() returns correct values before any tracking."""
+        tracker = TokenTracker(budget=5.00)
+        report = tracker.report()
+
+        assert report["total_cost"] == 0.0
+        assert report["session_cost"] == 0.0
+        assert report["persisted_cost"] == 0.0
+        assert report["calls"] == 0
+        assert report["remaining"] == 5.00
+        assert report["budget"] == 5.00
+        assert report["period"] == "session"
+        assert report["is_over_budget"] is False
+
+    def test_token_budget_exceeded_is_exception(self):
+        """Test that TokenBudgetExceeded can be caught as Exception."""
+        from tokenguard import TokenBudgetExceeded
+
+        exc = TokenBudgetExceeded(budget=1.00, spent=1.50)
+        assert isinstance(exc, Exception)
+
+        # Verify it can be caught as generic Exception
+        try:
+            raise TokenBudgetExceeded(budget=1.00, spent=1.50, model="gpt-4")
+        except Exception as e:
+            assert isinstance(e, TokenBudgetExceeded)
+            assert e.budget == 1.00
+
+    def test_usage_history_multiple_tracks(self):
+        """Test usage_history contains correct items after multiple tracks."""
+        tracker = TokenTracker(budget=10.00)
+        tracker.track(input_tokens=100, output_tokens=50, model="gpt-4")
+        tracker.track(input_tokens=200, output_tokens=100, model="claude-3-haiku")
+        tracker.track(input_tokens=300, output_tokens=150, model="gpt-4o")
+
+        history = tracker.usage_history
+        assert len(history) == 3
+        assert history[0].input_tokens == 100
+        assert history[0].model == "gpt-4"
+        assert history[1].input_tokens == 200
+        assert history[1].model == "claude-3-haiku"
+        assert history[2].input_tokens == 300
+        assert history[2].model == "gpt-4o"

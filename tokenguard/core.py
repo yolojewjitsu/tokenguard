@@ -171,7 +171,7 @@ def calculate_cost(
 
     Raises:
         ValueError: If token counts or custom cost rates are negative, or if
-            model is unknown and no custom rates are provided.
+            model is unknown and both custom rates are not provided.
 
     """
     if input_tokens < 0:
