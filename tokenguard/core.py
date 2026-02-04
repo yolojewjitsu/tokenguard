@@ -169,7 +169,16 @@ def calculate_cost(
     Returns:
         Total cost in USD.
 
+    Raises:
+        ValueError: If custom cost rates are negative, or if model is unknown
+            and no custom rates are provided.
+
     """
+    if input_cost_per_1k is not None and input_cost_per_1k < 0:
+        raise ValueError(f"input_cost_per_1k must be non-negative, got {input_cost_per_1k}")
+    if output_cost_per_1k is not None and output_cost_per_1k < 0:
+        raise ValueError(f"output_cost_per_1k must be non-negative, got {output_cost_per_1k}")
+
     if input_cost_per_1k is not None and output_cost_per_1k is not None:
         input_rate = input_cost_per_1k
         output_rate = output_cost_per_1k

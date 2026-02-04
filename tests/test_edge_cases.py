@@ -259,3 +259,66 @@ class TestEdgeCases:
 
         tracker.track(input_tokens=1000, output_tokens=500, model="gpt-4")
         assert len(hits) == 2
+
+    def test_calculate_cost_negative_input_rate_raises(self):
+        """Test that negative input_cost_per_1k raises ValueError."""
+        with pytest.raises(ValueError, match="input_cost_per_1k must be non-negative"):
+            calculate_cost(1000, 1000, "gpt-4", input_cost_per_1k=-0.01)
+
+    def test_calculate_cost_negative_output_rate_raises(self):
+        """Test that negative output_cost_per_1k raises ValueError."""
+        with pytest.raises(ValueError, match="output_cost_per_1k must be non-negative"):
+            calculate_cost(1000, 1000, "gpt-4", output_cost_per_1k=-0.01)
+
+    def test_calculate_cost_unknown_model_raises(self):
+        """Test that calculate_cost raises for unknown model without custom rates."""
+        with pytest.raises(ValueError, match="Unknown model"):
+            calculate_cost(1000, 1000, "unknown-model-xyz")
+
+    def test_calculate_cost_unknown_model_with_both_rates(self):
+        """Test that unknown model works when both custom rates provided."""
+        # Should not raise because we don't need to look up the model
+        cost = calculate_cost(
+            1000, 1000, "unknown-model-xyz",
+            input_cost_per_1k=0.01,
+            output_cost_per_1k=0.02,
+        )
+        assert cost == pytest.approx(0.03)
+
+    def test_decorator_passes_arguments(self):
+        """Test that decorator correctly passes function arguments."""
+        @tokenguard(budget=1.00)
+        def add_tokens(a: int, b: int, model: str = "gpt-4") -> dict:
+            return {
+                "result": a + b,
+                "input_tokens": a,
+                "output_tokens": b,
+                "model": model,
+            }
+
+        result = add_tokens(100, 50, model="gpt-4")
+        assert result["result"] == 150
+        assert add_tokens.tracker.call_count == 1
+
+    def test_decorator_function_raises_no_tracking(self):
+        """Test that decorator doesn't track when function raises."""
+        @tokenguard(budget=1.00)
+        def failing_func():
+            raise RuntimeError("Intentional error")
+
+        with pytest.raises(RuntimeError, match="Intentional error"):
+            failing_func()
+
+        # Should not track since function raised before returning
+        assert failing_func.tracker.call_count == 0
+
+    def test_set_model_cost_zero_rates_allowed(self):
+        """Test that zero cost rates are allowed (for free models)."""
+        set_model_cost("free-model-test", input=0.0, output=0.0)
+        costs = get_model_cost("free-model-test")
+        assert costs["input"] == 0.0
+        assert costs["output"] == 0.0
+
+        # Calculate cost with free model
+        cost = calculate_cost(1000, 1000, "free-model-test")
+        assert cost == 0.0
