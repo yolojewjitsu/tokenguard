@@ -79,7 +79,7 @@ class TokenBudgetExceeded(Exception):
         )
 
     def __repr__(self) -> str:
-        return f"TokenBudgetExceeded(budget={self.budget}, spent={self.spent})"
+        return f"TokenBudgetExceeded(budget={self.budget}, spent={self.spent}, model={self.model!r})"
 
 
 @dataclass
@@ -203,8 +203,8 @@ class TokenTracker:
 
     Example:
         tracker = TokenTracker(budget=5.00, period="session")
-        tracker.track(input_tokens=150, output_tokens=200, model="gpt-4")
-        print(tracker.total_cost)  # $0.0135
+        tracker.track(input_tokens=1000, output_tokens=500, model="gpt-4")
+        print(tracker.total_cost)  # $0.06
 
     """
 
@@ -450,7 +450,7 @@ class TokenTracker:
                 # Period rolled over, reset
                 return 0.0
             return data.get("total_cost", 0.0)
-        except (json.JSONDecodeError, KeyError):
+        except (json.JSONDecodeError, OSError):
             return 0.0
 
     def _persist_cost(self, session_cost: float) -> None:

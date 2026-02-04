@@ -315,6 +315,25 @@ class TestDailyMonthlyPersistence:
         tracker = TokenTracker(budget=10.00, period="daily")
         assert tracker.total_cost == 0.0
 
+    def test_file_read_error_resets(self, tmp_path, monkeypatch):
+        """Test tracker handles file read errors gracefully."""
+        import os
+
+        monkeypatch.setattr("tokenguard.core._get_storage_dir", lambda: tmp_path)
+
+        # Pre-create file with no read permissions
+        daily_file = tmp_path / "daily.json"
+        daily_file.write_text('{"date": "2026-01-01", "total_cost": 5.0}')
+        os.chmod(daily_file, 0o000)
+
+        try:
+            tracker = TokenTracker(budget=10.00, period="daily")
+            # Should gracefully fall back to 0.0 on permission error
+            assert tracker.total_cost == 0.0
+        finally:
+            # Restore permissions so tmp_path cleanup can work
+            os.chmod(daily_file, 0o644)
+
     def test_reset_all_daily(self, tmp_path, monkeypatch):
         """Test reset_all clears daily persistence file."""
         monkeypatch.setattr("tokenguard.core._get_storage_dir", lambda: tmp_path)
@@ -506,5 +525,9 @@ class TestTokenBudgetExceeded:
 
     def test_exception_repr(self):
         """Test exception repr."""
-        exc = TokenBudgetExceeded(budget=1.00, spent=1.50)
-        assert "TokenBudgetExceeded" in repr(exc)
+        exc = TokenBudgetExceeded(budget=1.00, spent=1.50, model="gpt-4")
+        r = repr(exc)
+        assert "TokenBudgetExceeded" in r
+        assert "budget=1.0" in r
+        assert "spent=1.5" in r
+        assert "model='gpt-4'" in r
