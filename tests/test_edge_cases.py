@@ -609,3 +609,55 @@ class TestEdgeCases:
             timestamp=timestamp,
         )
         assert usage1 != usage2
+
+    def test_persisted_monthly_file_missing_period_key(self, tmp_path, monkeypatch):
+        """Test that monthly persistence file missing period key is handled."""
+        import json
+
+        monkeypatch.setattr("tokenguard.core._get_storage_dir", lambda: tmp_path)
+        monkeypatch.setattr("tokenguard.core._this_month", lambda: "2026-02")
+
+        # Pre-create a monthly.json missing the 'month' key
+        monthly_file = tmp_path / "monthly.json"
+        monthly_file.write_text(
+            json.dumps(
+                {
+                    "total_cost": 5.0  # Missing 'month' key
+                }
+            )
+        )
+
+        tracker = TokenTracker(budget=10.00, period="monthly")
+        # Should fall back to 0.0 when period key is missing
+        assert tracker.total_cost == 0.0
+
+    def test_track_negative_custom_input_rate_raises(self):
+        """Test that track() with negative input_cost_per_1k raises ValueError."""
+        tracker = TokenTracker(budget=1.00)
+        with pytest.raises(ValueError, match="input_cost_per_1k must be non-negative"):
+            tracker.track(
+                input_tokens=100,
+                output_tokens=50,
+                model="gpt-4",
+                input_cost_per_1k=-0.01,
+            )
+
+    def test_track_negative_custom_output_rate_raises(self):
+        """Test that track() with negative output_cost_per_1k raises ValueError."""
+        tracker = TokenTracker(budget=1.00)
+        with pytest.raises(ValueError, match="output_cost_per_1k must be non-negative"):
+            tracker.track(
+                input_tokens=100,
+                output_tokens=50,
+                model="gpt-4",
+                output_cost_per_1k=-0.01,
+            )
+
+    def test_is_over_budget_false_when_under(self):
+        """Test is_over_budget returns False when under budget."""
+        tracker = TokenTracker(budget=10.00)
+        tracker.track(input_tokens=100, output_tokens=50, model="gpt-4")
+
+        # Cost is ~0.006, well under $10 budget
+        assert tracker.is_over_budget is False
+        assert tracker.remaining > 0

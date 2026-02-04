@@ -523,7 +523,7 @@ def tokenguard(
         budget: Maximum budget in USD for the lifetime of this decorated function.
         alert_at: Fraction of budget to trigger alert (e.g., 0.8 for 80%).
         on_alert: Callback when alert threshold is reached.
-        on_budget_hit: Callback when budget is exceeded.
+        on_budget_hit: Callback when budget is met or exceeded.
         raise_on_exceed: Whether to raise TokenBudgetExceeded.
 
     Note:
@@ -595,7 +595,7 @@ def token_budget(
         budget: Maximum budget in USD.
         alert_at: Fraction of budget to trigger alert.
         on_alert: Callback when alert threshold is reached.
-        on_budget_hit: Callback when budget is exceeded.
+        on_budget_hit: Callback when budget is met or exceeded.
         raise_on_exceed: Whether to raise TokenBudgetExceeded.
 
     Yields:
