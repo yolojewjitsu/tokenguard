@@ -774,3 +774,69 @@ class TestEdgeCases:
         assert history[1].model == "claude-3-haiku"
         assert history[2].input_tokens == 300
         assert history[2].model == "gpt-4o"
+
+    def test_track_unknown_model_partial_input_rate_raises(self):
+        """Test that track() with unknown model and only input custom rate raises."""
+        tracker = TokenTracker(budget=1.00)
+        # Need to look up model for the missing output rate
+        with pytest.raises(ValueError, match="Unknown model"):
+            tracker.track(
+                input_tokens=100,
+                output_tokens=50,
+                model="unknown-model-xyz",
+                input_cost_per_1k=0.01,
+            )
+
+    def test_track_unknown_model_partial_output_rate_raises(self):
+        """Test that track() with unknown model and only output custom rate raises."""
+        tracker = TokenTracker(budget=1.00)
+        # Need to look up model for the missing input rate
+        with pytest.raises(ValueError, match="Unknown model"):
+            tracker.track(
+                input_tokens=100,
+                output_tokens=50,
+                model="unknown-model-xyz",
+                output_cost_per_1k=0.02,
+            )
+
+    def test_empty_model_name_raises(self):
+        """Test that empty string model name raises ValueError."""
+        with pytest.raises(ValueError, match="Unknown model"):
+            get_model_cost("")
+
+    def test_model_with_leading_whitespace_raises(self):
+        """Test that model name with leading whitespace doesn't match."""
+        with pytest.raises(ValueError, match="Unknown model"):
+            get_model_cost(" gpt-4")
+
+    def test_model_with_trailing_whitespace_matches(self):
+        """Test that model name with trailing whitespace matches via prefix."""
+        # "gpt-4 ".startswith("gpt-4") is True, so it matches
+        costs = get_model_cost("gpt-4 ")
+        assert costs["input"] == 0.03
+        assert costs["output"] == 0.06
+
+    def test_calculate_cost_empty_model_with_both_rates(self):
+        """Test that empty model name works when both custom rates provided."""
+        # Should not raise because we don't need to look up the model
+        cost = calculate_cost(
+            1000,
+            1000,
+            "",
+            input_cost_per_1k=0.01,
+            output_cost_per_1k=0.02,
+        )
+        assert cost == pytest.approx(0.03)
+
+    def test_track_unknown_model_with_both_rates_succeeds(self):
+        """Test that track() with unknown model but both rates works."""
+        tracker = TokenTracker(budget=1.00)
+        usage = tracker.track(
+            input_tokens=1000,
+            output_tokens=1000,
+            model="unknown-model-xyz",
+            input_cost_per_1k=0.01,
+            output_cost_per_1k=0.02,
+        )
+        assert usage.cost == pytest.approx(0.03)
+        assert tracker.total_cost == pytest.approx(0.03)

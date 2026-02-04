@@ -505,8 +505,9 @@ def tokenguard(
 ) -> Callable[[Callable[..., T]], Callable[..., T]]:
     """Decorator for tracking token usage and enforcing budgets.
 
-    The decorated function must return a dict with 'input_tokens', 'output_tokens',
-    and 'model' keys. If any of these keys are missing, no tracking occurs.
+    If the decorated function returns a dict with 'input_tokens', 'output_tokens',
+    and 'model' keys, that usage will be tracked. Non-dict results or dicts
+    missing any of these keys are returned unchanged without tracking.
 
     Example:
         @tokenguard(budget=1.00, alert_at=0.80)
