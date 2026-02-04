@@ -66,8 +66,8 @@ class TestCalculateCost:
         # 1000 * 0.01 / 1000 + 1000 * 0.02 / 1000 = 0.01 + 0.02 = 0.03
         assert cost == pytest.approx(0.03)
 
-    def test_partial_custom_rates(self):
-        """Test calculation with partial custom rates."""
+    def test_partial_custom_input_rate(self):
+        """Test calculation with partial custom input rate."""
         cost = calculate_cost(
             1000, 1000, "gpt-4",
             input_cost_per_1k=0.01,  # Custom input
@@ -75,6 +75,16 @@ class TestCalculateCost:
         )
         # 1000 * 0.01 / 1000 + 1000 * 0.06 / 1000 = 0.01 + 0.06 = 0.07
         assert cost == pytest.approx(0.07)
+
+    def test_partial_custom_output_rate(self):
+        """Test calculation with partial custom output rate."""
+        cost = calculate_cost(
+            1000, 1000, "gpt-4",
+            # input uses model default (0.03)
+            output_cost_per_1k=0.01,  # Custom output
+        )
+        # 1000 * 0.03 / 1000 + 1000 * 0.01 / 1000 = 0.03 + 0.01 = 0.04
+        assert cost == pytest.approx(0.04)
 
 
 class TestTokenTracker:
@@ -152,6 +162,30 @@ class TestTokenTracker:
         tracker.track(input_tokens=1000, output_tokens=500, model="gpt-4")
 
         assert len(alerts) == 1
+
+    def test_reset_allows_alert_to_fire_again(self):
+        """Test that reset() allows alert to fire again."""
+        alerts = []
+
+        def on_alert(tracker, usage):
+            alerts.append(usage)
+
+        tracker = TokenTracker(
+            budget=0.10,
+            alert_at=0.5,
+            on_alert=on_alert,
+            raise_on_exceed=False,
+        )
+
+        # First call triggers alert (0.06 > 50% of 0.10)
+        tracker.track(input_tokens=1000, output_tokens=500, model="gpt-4")
+        assert len(alerts) == 1
+
+        tracker.reset()
+
+        # After reset, alert should fire again
+        tracker.track(input_tokens=1000, output_tokens=500, model="gpt-4")
+        assert len(alerts) == 2
 
     def test_budget_hit_callback(self):
         """Test on_budget_hit callback."""
@@ -531,3 +565,10 @@ class TestTokenBudgetExceeded:
         assert "budget=1.0" in r
         assert "spent=1.5" in r
         assert "model='gpt-4'" in r
+
+    def test_exception_repr_no_model(self):
+        """Test exception repr when model is None."""
+        exc = TokenBudgetExceeded(budget=1.00, spent=1.50)
+        r = repr(exc)
+        assert "TokenBudgetExceeded" in r
+        assert "model=None" in r

@@ -476,7 +476,7 @@ def tokenguard(
     """Decorator for tracking token usage and enforcing budgets.
 
     The decorated function must return a dict with 'input_tokens', 'output_tokens',
-    and 'model' keys, or the function must accept a 'tracker' keyword argument.
+    and 'model' keys. If any of these keys are missing, no tracking occurs.
 
     Example:
         @tokenguard(budget=1.00, alert_at=0.80)
