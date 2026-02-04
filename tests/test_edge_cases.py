@@ -322,3 +322,88 @@ class TestEdgeCases:
         # Calculate cost with free model
         cost = calculate_cost(1000, 1000, "free-model-test")
         assert cost == 0.0
+
+    def test_reset_all_resets_callback_flags(self):
+        """Test that reset_all() resets both alert and budget_hit flags."""
+        alerts = []
+        hits = []
+
+        tracker = TokenTracker(
+            budget=0.05,
+            alert_at=0.5,
+            on_alert=lambda t, u: alerts.append(u),
+            on_budget_hit=lambda t, u: hits.append(u),
+            raise_on_exceed=False,
+        )
+
+        # First call triggers both
+        tracker.track(input_tokens=1000, output_tokens=500, model="gpt-4")
+        assert len(alerts) == 1
+        assert len(hits) == 1
+
+        # reset_all should reset both flags
+        tracker.reset_all()
+
+        # After reset_all, both should fire again
+        tracker.track(input_tokens=1000, output_tokens=500, model="gpt-4")
+        assert len(alerts) == 2
+        assert len(hits) == 2
+
+    def test_decorator_raise_on_exceed_false(self):
+        """Test decorator with raise_on_exceed=False allows continued tracking."""
+        @tokenguard(budget=0.01, raise_on_exceed=False)
+        def cheap_call():
+            return {"input_tokens": 1000, "output_tokens": 500, "model": "gpt-4"}
+
+        # First call exceeds budget but doesn't raise
+        result = cheap_call()
+        assert result["input_tokens"] == 1000
+        assert cheap_call.tracker.is_over_budget
+
+        # Can continue calling
+        cheap_call()
+        assert cheap_call.tracker.call_count == 2
+
+    def test_persisted_invalid_total_cost_type(self, tmp_path, monkeypatch):
+        """Test that invalid total_cost type in persistence file is handled."""
+        import json
+
+        monkeypatch.setattr("tokenguard.core._get_storage_dir", lambda: tmp_path)
+        monkeypatch.setattr("tokenguard.core._today", lambda: "2026-02-04")
+
+        # Pre-create a daily.json with invalid total_cost type
+        daily_file = tmp_path / "daily.json"
+        daily_file.write_text(json.dumps({
+            "date": "2026-02-04",
+            "total_cost": "not a number"  # Invalid type
+        }))
+
+        tracker = TokenTracker(budget=10.00, period="daily")
+        # Should fall back to 0.0 when total_cost is not a number
+        assert tracker.total_cost == 0.0
+
+    def test_token_usage_explicit_timestamp(self):
+        """Test TokenUsage with explicit timestamp value."""
+        from tokenguard import TokenUsage
+
+        explicit_time = 1234567890.123
+        usage = TokenUsage(
+            input_tokens=100,
+            output_tokens=50,
+            model="gpt-4",
+            cost=0.05,
+            timestamp=explicit_time,
+        )
+        assert usage.timestamp == explicit_time
+
+    def test_is_over_budget_at_exact_limit(self):
+        """Test is_over_budget when cost equals budget exactly."""
+        # gpt-4: 0.03/1k input, 0.06/1k output
+        # 1000 input + 0 output = $0.03
+        tracker = TokenTracker(budget=0.03, raise_on_exceed=False)
+        tracker.track(input_tokens=1000, output_tokens=0, model="gpt-4")
+
+        # At exact limit, is_over_budget should be True (budget met)
+        assert tracker.total_cost == pytest.approx(0.03)
+        assert tracker.is_over_budget is True
+        assert tracker.remaining == 0.0

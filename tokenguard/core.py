@@ -288,7 +288,7 @@ class TokenTracker:
 
     @property
     def is_over_budget(self) -> bool:
-        """Whether the budget has been exceeded."""
+        """Whether the budget has been met or exceeded."""
         return self.total_cost >= self._budget
 
     @property
@@ -458,7 +458,11 @@ class TokenTracker:
             if data.get(period_key) != current_period:
                 # Period rolled over, reset
                 return 0.0
-            return data.get("total_cost", 0.0)
+            total_cost = data.get("total_cost", 0.0)
+            # Validate that total_cost is a number
+            if not isinstance(total_cost, (int, float)):
+                return 0.0
+            return float(total_cost)
         except (json.JSONDecodeError, OSError):
             return 0.0
 
