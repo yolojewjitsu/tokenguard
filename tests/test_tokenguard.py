@@ -222,8 +222,11 @@ class TestTokenTracker:
         report = tracker.report()
 
         assert report["total_cost"] == pytest.approx(0.06)
+        assert report["session_cost"] == pytest.approx(0.06)
+        assert report["persisted_cost"] == 0.0
         assert report["calls"] == 1
         assert report["budget"] == 1.00
+        assert report["period"] == "session"
         assert report["remaining"] == pytest.approx(0.94)
         assert report["is_over_budget"] is False
 
@@ -240,6 +243,18 @@ class TestTokenTracker:
         history = tracker.usage_history
         assert len(history) == 1
         assert history[0].input_tokens == 100
+
+    def test_usage_history_is_copy(self):
+        """Test that mutating usage_history doesn't affect internal state."""
+        tracker = TokenTracker(budget=1.00)
+        tracker.track(input_tokens=100, output_tokens=50, model="gpt-4")
+
+        history = tracker.usage_history
+        history.clear()  # Mutate the returned list
+
+        # Internal state should be unaffected
+        assert tracker.call_count == 1
+        assert len(tracker.usage_history) == 1
 
     def test_budget_property(self):
         """Test budget property returns correct value."""
@@ -273,6 +288,38 @@ class TestTokenTracker:
             tracker.track(input_tokens=1000, output_tokens=500, model="gpt-4")
 
         assert exc.value.model == "gpt-4"
+
+    def test_alert_at_without_callback(self):
+        """Test that alert_at works without on_alert callback."""
+        # Should not crash when alert_at is set but on_alert is None
+        tracker = TokenTracker(
+            budget=0.10,
+            alert_at=0.5,
+            on_alert=None,  # No callback
+            raise_on_exceed=False,
+        )
+        # This should trigger alert threshold but not crash
+        tracker.track(input_tokens=1000, output_tokens=500, model="gpt-4")
+        assert tracker.total_cost == pytest.approx(0.06)
+
+    def test_alert_and_budget_hit_same_call(self):
+        """Test that both alert and budget_hit can fire on same call."""
+        alerts = []
+        hits = []
+
+        tracker = TokenTracker(
+            budget=0.05,
+            alert_at=0.5,
+            on_alert=lambda t, u: alerts.append(u),
+            on_budget_hit=lambda t, u: hits.append(u),
+            raise_on_exceed=False,
+        )
+
+        # Cost ~0.06 exceeds both alert (0.025) and budget (0.05)
+        tracker.track(input_tokens=1000, output_tokens=500, model="gpt-4")
+
+        assert len(alerts) == 1
+        assert len(hits) == 1
 
 
 class TestDailyMonthlyPersistence:
@@ -430,6 +477,31 @@ class TestDailyMonthlyPersistence:
 
         assert tracker.total_cost == 0.0
         # No files should be created or touched for session
+
+    def test_reset_preserves_persisted_cost(self, tmp_path, monkeypatch):
+        """Test reset() for daily tracker preserves persisted cost."""
+        import json
+        import time
+
+        monkeypatch.setattr("tokenguard.core._get_storage_dir", lambda: tmp_path)
+
+        # Pre-create a daily.json with existing cost
+        daily_file = tmp_path / "daily.json"
+        daily_file.write_text(json.dumps({
+            "date": time.strftime("%Y-%m-%d"),
+            "total_cost": 0.50
+        }))
+
+        tracker = TokenTracker(budget=10.00, period="daily")
+        assert tracker.total_cost == 0.50
+
+        # Track some more
+        tracker.track(input_tokens=1000, output_tokens=500, model="gpt-4")
+        assert tracker.total_cost == pytest.approx(0.56)
+
+        # Reset - should clear session but keep persisted
+        tracker.reset()
+        assert tracker.total_cost == 0.50  # Back to persisted only
 
     def test_get_storage_dir_creates_directory(self, tmp_path, monkeypatch):
         """Test _get_storage_dir creates the .tokenguard directory."""
