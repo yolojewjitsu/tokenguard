@@ -339,7 +339,7 @@ class TokenTracker:
             The TokenUsage record.
 
         Raises:
-            TokenBudgetExceeded: If budget is exceeded and raise_on_exceed=True.
+            TokenBudgetExceeded: If budget is met or exceeded and raise_on_exceed=True.
             ValueError: If token counts or custom cost rates are negative.
 
         """
@@ -477,7 +477,7 @@ class TokenTracker:
             if not isinstance(total_cost, (int, float)) or total_cost < 0:
                 return 0.0
             return float(total_cost)
-        except (json.JSONDecodeError, OSError):
+        except (json.JSONDecodeError, OSError, AttributeError, TypeError):
             return 0.0
 
     def _persist_cost(self, session_cost: float) -> None:

@@ -661,3 +661,49 @@ class TestEdgeCases:
         # Cost is ~0.006, well under $10 budget
         assert tracker.is_over_budget is False
         assert tracker.remaining > 0
+
+    def test_persisted_json_list_handled(self, tmp_path, monkeypatch):
+        """Test that persistence file containing JSON list is handled gracefully."""
+        monkeypatch.setattr("tokenguard.core._get_storage_dir", lambda: tmp_path)
+        monkeypatch.setattr("tokenguard.core._today", lambda: "2026-02-04")
+
+        # Pre-create a daily.json with a list instead of dict
+        daily_file = tmp_path / "daily.json"
+        daily_file.write_text("[]")  # Valid JSON but wrong type
+
+        tracker = TokenTracker(budget=10.00, period="daily")
+        # Should fall back to 0.0 when JSON is not a dict
+        assert tracker.total_cost == 0.0
+
+    def test_calculate_cost_unknown_model_partial_input_rate_raises(self):
+        """Test that unknown model with only input custom rate still raises."""
+        # Need to look up model for the missing output rate
+        with pytest.raises(ValueError, match="Unknown model"):
+            calculate_cost(1000, 1000, "unknown-model-xyz", input_cost_per_1k=0.01)
+
+    def test_calculate_cost_unknown_model_partial_output_rate_raises(self):
+        """Test that unknown model with only output custom rate still raises."""
+        # Need to look up model for the missing input rate
+        with pytest.raises(ValueError, match="Unknown model"):
+            calculate_cost(1000, 1000, "unknown-model-xyz", output_cost_per_1k=0.02)
+
+    def test_tracker_initial_state(self):
+        """Test tracker has correct initial state before any tracking."""
+        tracker = TokenTracker(budget=10.00)
+
+        assert tracker.total_cost == 0.0
+        assert tracker.remaining == 10.00
+        assert tracker.call_count == 0
+        assert tracker.usage_history == []
+        assert tracker.is_over_budget is False
+
+    def test_track_returns_correct_usage(self):
+        """Test that track() returns TokenUsage with correct fields."""
+        tracker = TokenTracker(budget=10.00)
+        usage = tracker.track(input_tokens=100, output_tokens=50, model="gpt-4")
+
+        assert usage.input_tokens == 100
+        assert usage.output_tokens == 50
+        assert usage.model == "gpt-4"
+        assert usage.cost > 0
+        assert usage.timestamp > 0
