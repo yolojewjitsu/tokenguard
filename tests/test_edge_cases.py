@@ -2,7 +2,15 @@
 
 import pytest
 
-from tokenguard import TokenTracker, tokenguard, calculate_cost, get_model_cost, set_model_cost
+from tokenguard import (
+    TokenTracker,
+    TokenUsage,
+    calculate_cost,
+    get_model_cost,
+    set_model_cost,
+    token_budget,
+    tokenguard,
+)
 
 
 class TestEdgeCases:
@@ -384,8 +392,6 @@ class TestEdgeCases:
 
     def test_token_usage_explicit_timestamp(self):
         """Test TokenUsage with explicit timestamp value."""
-        from tokenguard import TokenUsage
-
         explicit_time = 1234567890.123
         usage = TokenUsage(
             input_tokens=100,
@@ -438,8 +444,6 @@ class TestEdgeCases:
 
     def test_context_manager_raise_on_exceed_false(self):
         """Test context manager with raise_on_exceed=False allows continued tracking."""
-        from tokenguard import token_budget
-
         with token_budget(budget=0.01, raise_on_exceed=False) as guard:
             # First track exceeds budget but doesn't raise
             guard.track(input_tokens=1000, output_tokens=500, model="gpt-4")
@@ -448,3 +452,47 @@ class TestEdgeCases:
             # Can continue tracking
             guard.track(input_tokens=100, output_tokens=50, model="gpt-4")
             assert guard.call_count == 2
+
+    def test_budget_hit_without_callback(self):
+        """Test that on_budget_hit=None doesn't crash when budget is hit."""
+        tracker = TokenTracker(
+            budget=0.05,
+            on_budget_hit=None,  # No callback
+            raise_on_exceed=False,
+        )
+        # Should not crash when budget is hit without callback
+        tracker.track(input_tokens=1000, output_tokens=500, model="gpt-4")
+        assert tracker.is_over_budget
+
+    def test_calculate_cost_zero_tokens(self):
+        """Test calculate_cost with zero tokens."""
+        cost = calculate_cost(0, 0, "gpt-4")
+        assert cost == 0.0
+
+        # Zero input, some output
+        cost = calculate_cost(0, 1000, "gpt-4")
+        assert cost == pytest.approx(0.06)
+
+        # Some input, zero output
+        cost = calculate_cost(1000, 0, "gpt-4")
+        assert cost == pytest.approx(0.03)
+
+    def test_daily_persistence_shared_between_trackers(self, tmp_path, monkeypatch):
+        """Test that multiple daily trackers share the same persisted cost."""
+        monkeypatch.setattr("tokenguard.core._get_storage_dir", lambda: tmp_path)
+
+        # First tracker tracks some cost
+        tracker1 = TokenTracker(budget=10.00, period="daily")
+        tracker1.track(input_tokens=1000, output_tokens=500, model="gpt-4")
+        cost1 = tracker1.total_cost
+
+        # Second tracker should see the persisted cost
+        tracker2 = TokenTracker(budget=10.00, period="daily")
+        assert tracker2.total_cost == pytest.approx(cost1)
+
+        # Second tracker adds more
+        tracker2.track(input_tokens=1000, output_tokens=500, model="gpt-4")
+
+        # Third tracker should see both
+        tracker3 = TokenTracker(budget=10.00, period="daily")
+        assert tracker3.total_cost == pytest.approx(cost1 * 2)

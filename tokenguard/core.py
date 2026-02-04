@@ -330,7 +330,7 @@ class TokenTracker:
 
         Raises:
             TokenBudgetExceeded: If budget is exceeded and raise_on_exceed=True.
-            ValueError: If token counts are negative.
+            ValueError: If token counts or custom cost rates are negative.
 
         """
         if input_tokens < 0:
