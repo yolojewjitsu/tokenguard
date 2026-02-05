@@ -532,6 +532,9 @@ def tokenguard(
         on_budget_hit: Callback when budget is met or exceeded.
         raise_on_exceed: Whether to raise TokenBudgetExceeded.
 
+    Raises:
+        ValueError: If budget is negative or alert_at is not between 0.0 and 1.0.
+
     Note:
         This decorator does not support async functions. For async code,
         use TokenTracker directly.
@@ -603,6 +606,9 @@ def token_budget(
         on_alert: Callback when alert threshold is reached.
         on_budget_hit: Callback when budget is met or exceeded.
         raise_on_exceed: Whether to raise TokenBudgetExceeded.
+
+    Raises:
+        ValueError: If budget is negative or alert_at is not between 0.0 and 1.0.
 
     Yields:
         TokenTracker instance for tracking usage.

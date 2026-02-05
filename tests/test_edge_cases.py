@@ -1008,3 +1008,51 @@ class TestEdgeCases:
         # But the usage was still recorded before the callback was called
         assert tracker.call_count == 1
         assert tracker.is_over_budget
+
+    def test_persisted_empty_file_handled(self, tmp_path, monkeypatch):
+        """Test that empty persistence file is handled gracefully."""
+        monkeypatch.setattr("tokenguard.core._get_storage_dir", lambda: tmp_path)
+
+        # Pre-create an empty daily.json file
+        daily_file = tmp_path / "daily.json"
+        daily_file.write_text("")
+
+        tracker = TokenTracker(budget=10.00, period="daily")
+        # Should fall back to 0.0 when file is empty (invalid JSON)
+        assert tracker.total_cost == 0.0
+
+    def test_persisted_json_number_handled(self, tmp_path, monkeypatch):
+        """Test that persistence file containing JSON number is handled gracefully."""
+        monkeypatch.setattr("tokenguard.core._get_storage_dir", lambda: tmp_path)
+
+        # Pre-create a daily.json with a number instead of dict
+        daily_file = tmp_path / "daily.json"
+        daily_file.write_text("42")  # Valid JSON but wrong type
+
+        tracker = TokenTracker(budget=10.00, period="daily")
+        # Should fall back to 0.0 when JSON is a number (not a dict)
+        assert tracker.total_cost == 0.0
+
+    def test_persisted_json_string_handled(self, tmp_path, monkeypatch):
+        """Test that persistence file containing JSON string is handled gracefully."""
+        monkeypatch.setattr("tokenguard.core._get_storage_dir", lambda: tmp_path)
+
+        # Pre-create a monthly.json with a string instead of dict
+        monthly_file = tmp_path / "monthly.json"
+        monthly_file.write_text('"hello"')  # Valid JSON but wrong type
+
+        tracker = TokenTracker(budget=10.00, period="monthly")
+        # Should fall back to 0.0 when JSON is a string (not a dict)
+        assert tracker.total_cost == 0.0
+
+    def test_persisted_json_boolean_handled(self, tmp_path, monkeypatch):
+        """Test that persistence file containing JSON boolean is handled gracefully."""
+        monkeypatch.setattr("tokenguard.core._get_storage_dir", lambda: tmp_path)
+
+        # Pre-create a daily.json with a boolean instead of dict
+        daily_file = tmp_path / "daily.json"
+        daily_file.write_text("true")  # Valid JSON but wrong type
+
+        tracker = TokenTracker(budget=10.00, period="daily")
+        # Should fall back to 0.0 when JSON is a boolean (not a dict)
+        assert tracker.total_cost == 0.0
