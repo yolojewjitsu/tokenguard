@@ -1109,3 +1109,37 @@ class TestEdgeCases:
         assert tracker.total_cost == 0.0
         # Directory should still exist (we couldn't delete it)
         assert monthly_dir.exists()
+
+    def test_track_when_daily_file_is_directory(self, tmp_path, monkeypatch):
+        """Test that track() handles daily persistence file being a directory."""
+        monkeypatch.setattr("tokenguard.core._get_storage_dir", lambda: tmp_path)
+
+        # Pre-create daily.json as a directory
+        daily_dir = tmp_path / "daily.json"
+        daily_dir.mkdir()
+
+        tracker = TokenTracker(budget=10.00, period="daily")
+        # Should not crash when track tries to write to a directory
+        usage = tracker.track(input_tokens=1000, output_tokens=500, model="gpt-4")
+        assert usage.cost > 0
+        assert tracker.call_count == 1
+        # Directory should still exist
+        assert daily_dir.exists()
+        assert daily_dir.is_dir()
+
+    def test_track_when_monthly_file_is_directory(self, tmp_path, monkeypatch):
+        """Test that track() handles monthly persistence file being a directory."""
+        monkeypatch.setattr("tokenguard.core._get_storage_dir", lambda: tmp_path)
+
+        # Pre-create monthly.json as a directory
+        monthly_dir = tmp_path / "monthly.json"
+        monthly_dir.mkdir()
+
+        tracker = TokenTracker(budget=10.00, period="monthly")
+        # Should not crash when track tries to write to a directory
+        usage = tracker.track(input_tokens=1000, output_tokens=500, model="gpt-4")
+        assert usage.cost > 0
+        assert tracker.call_count == 1
+        # Directory should still exist
+        assert monthly_dir.exists()
+        assert monthly_dir.is_dir()

@@ -511,7 +511,11 @@ class TokenTracker:
                 "total_cost": self._persisted_cost + session_cost,
             }
 
-        file.write_text(json.dumps(data))
+        try:
+            file.write_text(json.dumps(data))
+        except OSError:
+            # Ignore errors (e.g., path is a directory, permission denied)
+            pass
 
 
 def tokenguard(
