@@ -840,3 +840,87 @@ class TestEdgeCases:
         )
         assert usage.cost == pytest.approx(0.03)
         assert tracker.total_cost == pytest.approx(0.03)
+
+    def test_tokenguard_decorator_invalid_budget_raises(self):
+        """Test that tokenguard decorator with negative budget raises."""
+        with pytest.raises(ValueError, match="non-negative"):
+
+            @tokenguard(budget=-1.00)
+            def func():
+                return {"input_tokens": 100, "output_tokens": 50, "model": "gpt-4"}
+
+    def test_tokenguard_decorator_invalid_alert_at_raises(self):
+        """Test that tokenguard decorator with invalid alert_at raises."""
+        with pytest.raises(ValueError, match="between 0.0 and 1.0"):
+
+            @tokenguard(budget=1.00, alert_at=1.5)
+            def func():
+                return {"input_tokens": 100, "output_tokens": 50, "model": "gpt-4"}
+
+        with pytest.raises(ValueError, match="between 0.0 and 1.0"):
+
+            @tokenguard(budget=1.00, alert_at=-0.1)
+            def func2():
+                return {"input_tokens": 100, "output_tokens": 50, "model": "gpt-4"}
+
+    def test_token_budget_invalid_budget_raises(self):
+        """Test that token_budget context manager with negative budget raises."""
+        with pytest.raises(ValueError, match="non-negative"):
+            with token_budget(budget=-1.00):
+                pass
+
+    def test_token_budget_invalid_alert_at_raises(self):
+        """Test that token_budget context manager with invalid alert_at raises."""
+        with pytest.raises(ValueError, match="between 0.0 and 1.0"):
+            with token_budget(budget=1.00, alert_at=1.5):
+                pass
+
+        with pytest.raises(ValueError, match="between 0.0 and 1.0"):
+            with token_budget(budget=1.00, alert_at=-0.1):
+                pass
+
+    def test_decorator_with_string_token_values_raises_type_error(self):
+        """Test that decorator raises TypeError when token fields are wrong type."""
+
+        @tokenguard(budget=1.00)
+        def returns_string_tokens():
+            return {
+                "input_tokens": "100",  # String instead of int
+                "output_tokens": 50,
+                "model": "gpt-4",
+            }
+
+        # Should raise TypeError when comparing string to 0
+        with pytest.raises(TypeError):
+            returns_string_tokens()
+
+    def test_decorator_with_none_token_value_skips_tracking(self):
+        """Test that decorator skips tracking when token field is None."""
+
+        @tokenguard(budget=1.00)
+        def returns_none_tokens():
+            return {
+                "input_tokens": None,  # Explicitly None
+                "output_tokens": 50,
+                "model": "gpt-4",
+            }
+
+        returns_none_tokens()
+        # Should not track since input_tokens is None
+        assert returns_none_tokens.tracker.call_count == 0
+
+    def test_decorator_with_zero_value_tracks(self):
+        """Test that decorator tracks when token fields are zero (not None)."""
+
+        @tokenguard(budget=1.00)
+        def returns_zero_tokens():
+            return {
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "model": "gpt-4",
+            }
+
+        returns_zero_tokens()
+        # Should track since values are 0, not None
+        assert returns_zero_tokens.tracker.call_count == 1
+        assert returns_zero_tokens.tracker.total_cost == 0.0
