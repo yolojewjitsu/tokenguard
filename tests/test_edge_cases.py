@@ -3,6 +3,7 @@
 import pytest
 
 from tokenguard import (
+    TokenBudgetExceeded,
     TokenTracker,
     TokenUsage,
     calculate_cost,
@@ -747,8 +748,6 @@ class TestEdgeCases:
 
     def test_token_budget_exceeded_is_exception(self):
         """Test that TokenBudgetExceeded can be caught as Exception."""
-        from tokenguard import TokenBudgetExceeded
-
         exc = TokenBudgetExceeded(budget=1.00, spent=1.50)
         assert isinstance(exc, Exception)
 
@@ -1055,4 +1054,28 @@ class TestEdgeCases:
 
         tracker = TokenTracker(budget=10.00, period="daily")
         # Should fall back to 0.0 when JSON is a boolean (not a dict)
+        assert tracker.total_cost == 0.0
+
+    def test_persisted_file_is_directory_handled(self, tmp_path, monkeypatch):
+        """Test that persistence file being a directory is handled gracefully."""
+        monkeypatch.setattr("tokenguard.core._get_storage_dir", lambda: tmp_path)
+
+        # Pre-create daily.json as a directory instead of a file
+        daily_dir = tmp_path / "daily.json"
+        daily_dir.mkdir()
+
+        tracker = TokenTracker(budget=10.00, period="daily")
+        # Should fall back to 0.0 when "file" is actually a directory (IsADirectoryError)
+        assert tracker.total_cost == 0.0
+
+    def test_persisted_monthly_file_is_directory_handled(self, tmp_path, monkeypatch):
+        """Test that monthly persistence file being a directory is handled gracefully."""
+        monkeypatch.setattr("tokenguard.core._get_storage_dir", lambda: tmp_path)
+
+        # Pre-create monthly.json as a directory instead of a file
+        monthly_dir = tmp_path / "monthly.json"
+        monthly_dir.mkdir()
+
+        tracker = TokenTracker(budget=10.00, period="monthly")
+        # Should fall back to 0.0 when "file" is actually a directory (IsADirectoryError)
         assert tracker.total_cost == 0.0

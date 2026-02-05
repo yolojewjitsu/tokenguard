@@ -84,7 +84,16 @@ class TokenBudgetExceeded(Exception):
 
 @dataclass
 class TokenUsage:
-    """Record of a single LLM API call's token usage."""
+    """Record of a single LLM API call's token usage.
+
+    Attributes:
+        input_tokens: Number of input tokens used.
+        output_tokens: Number of output tokens generated.
+        model: The model name used for the call.
+        cost: Calculated cost in USD for this call.
+        timestamp: Unix timestamp when the usage was recorded.
+
+    """
 
     input_tokens: int
     output_tokens: int
@@ -433,7 +442,8 @@ class TokenTracker:
         """Get a summary report of usage.
 
         Returns:
-            Dict with total_cost, calls, remaining, and other stats.
+            Dict with keys: total_cost, session_cost, persisted_cost, calls,
+            remaining, budget, period, is_over_budget.
 
         """
         with self._lock:
