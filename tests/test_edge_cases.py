@@ -1079,3 +1079,33 @@ class TestEdgeCases:
         tracker = TokenTracker(budget=10.00, period="monthly")
         # Should fall back to 0.0 when "file" is actually a directory (IsADirectoryError)
         assert tracker.total_cost == 0.0
+
+    def test_reset_all_when_daily_file_is_directory(self, tmp_path, monkeypatch):
+        """Test that reset_all() handles daily persistence file being a directory."""
+        monkeypatch.setattr("tokenguard.core._get_storage_dir", lambda: tmp_path)
+
+        # Pre-create daily.json as a directory
+        daily_dir = tmp_path / "daily.json"
+        daily_dir.mkdir()
+
+        tracker = TokenTracker(budget=10.00, period="daily")
+        # Should not crash when reset_all tries to unlink a directory
+        tracker.reset_all()
+        assert tracker.total_cost == 0.0
+        # Directory should still exist (we couldn't delete it)
+        assert daily_dir.exists()
+
+    def test_reset_all_when_monthly_file_is_directory(self, tmp_path, monkeypatch):
+        """Test that reset_all() handles monthly persistence file being a directory."""
+        monkeypatch.setattr("tokenguard.core._get_storage_dir", lambda: tmp_path)
+
+        # Pre-create monthly.json as a directory
+        monthly_dir = tmp_path / "monthly.json"
+        monthly_dir.mkdir()
+
+        tracker = TokenTracker(budget=10.00, period="monthly")
+        # Should not crash when reset_all tries to unlink a directory
+        tracker.reset_all()
+        assert tracker.total_cost == 0.0
+        # Directory should still exist (we couldn't delete it)
+        assert monthly_dir.exists()

@@ -433,10 +433,14 @@ class TokenTracker:
             self._budget_hit_fired = False
             self._persisted_cost = 0.0
 
-            if self._period == "daily":
-                self._get_daily_file().unlink(missing_ok=True)
-            elif self._period == "monthly":
-                self._get_monthly_file().unlink(missing_ok=True)
+            try:
+                if self._period == "daily":
+                    self._get_daily_file().unlink(missing_ok=True)
+                elif self._period == "monthly":
+                    self._get_monthly_file().unlink(missing_ok=True)
+            except OSError:
+                # Ignore errors (e.g., path is a directory, permission denied)
+                pass
 
     def report(self) -> dict[str, Any]:
         """Get a summary report of usage.
