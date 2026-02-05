@@ -249,6 +249,10 @@ class TokenTracker:
             on_budget_hit: Callback when budget is met or exceeded.
             raise_on_exceed: Whether to raise TokenBudgetExceeded.
 
+        Raises:
+            ValueError: If period is invalid, budget is negative, or alert_at
+                is not between 0.0 and 1.0.
+
         """
         if period not in ("session", "daily", "monthly"):
             raise ValueError(

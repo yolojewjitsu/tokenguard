@@ -924,3 +924,87 @@ class TestEdgeCases:
         # Should track since values are 0, not None
         assert returns_zero_tokens.tracker.call_count == 1
         assert returns_zero_tokens.tracker.total_cost == 0.0
+
+    def test_monthly_persistence_shared_between_trackers(self, tmp_path, monkeypatch):
+        """Test that multiple monthly trackers share the same persisted cost."""
+        monkeypatch.setattr("tokenguard.core._get_storage_dir", lambda: tmp_path)
+
+        # First tracker tracks some cost
+        tracker1 = TokenTracker(budget=10.00, period="monthly")
+        tracker1.track(input_tokens=1000, output_tokens=500, model="gpt-4")
+        cost1 = tracker1.total_cost
+
+        # Second tracker should see the persisted cost
+        tracker2 = TokenTracker(budget=10.00, period="monthly")
+        assert tracker2.total_cost == pytest.approx(cost1)
+
+        # Second tracker adds more
+        tracker2.track(input_tokens=1000, output_tokens=500, model="gpt-4")
+
+        # Third tracker should see both
+        tracker3 = TokenTracker(budget=10.00, period="monthly")
+        assert tracker3.total_cost == pytest.approx(cost1 * 2)
+
+    def test_reset_preserves_persisted_cost_monthly(self, tmp_path, monkeypatch):
+        """Test reset() for monthly tracker preserves persisted cost."""
+        import json
+        import time
+
+        monkeypatch.setattr("tokenguard.core._get_storage_dir", lambda: tmp_path)
+
+        # Pre-create a monthly.json with existing cost
+        monthly_file = tmp_path / "monthly.json"
+        monthly_file.write_text(
+            json.dumps({"month": time.strftime("%Y-%m"), "total_cost": 0.50})
+        )
+
+        tracker = TokenTracker(budget=10.00, period="monthly")
+        assert tracker.total_cost == 0.50
+
+        # Track some more
+        tracker.track(input_tokens=1000, output_tokens=500, model="gpt-4")
+        assert tracker.total_cost == pytest.approx(0.56)
+
+        # Reset - should clear session but keep persisted
+        tracker.reset()
+        assert tracker.total_cost == 0.50  # Back to persisted only
+
+    def test_alert_callback_exception_propagates(self):
+        """Test that exception in on_alert callback propagates to caller."""
+
+        def failing_alert(tracker, usage):
+            raise RuntimeError("Alert callback failed")
+
+        tracker = TokenTracker(
+            budget=0.10,
+            alert_at=0.5,
+            on_alert=failing_alert,
+            raise_on_exceed=False,
+        )
+
+        # Exception should propagate
+        with pytest.raises(RuntimeError, match="Alert callback failed"):
+            tracker.track(input_tokens=1000, output_tokens=500, model="gpt-4")
+
+        # But the usage was still recorded before the callback was called
+        assert tracker.call_count == 1
+
+    def test_budget_hit_callback_exception_propagates(self):
+        """Test that exception in on_budget_hit callback propagates to caller."""
+
+        def failing_budget_hit(tracker, usage):
+            raise RuntimeError("Budget hit callback failed")
+
+        tracker = TokenTracker(
+            budget=0.05,
+            on_budget_hit=failing_budget_hit,
+            raise_on_exceed=False,
+        )
+
+        # Exception should propagate
+        with pytest.raises(RuntimeError, match="Budget hit callback failed"):
+            tracker.track(input_tokens=1000, output_tokens=500, model="gpt-4")
+
+        # But the usage was still recorded before the callback was called
+        assert tracker.call_count == 1
+        assert tracker.is_over_budget
